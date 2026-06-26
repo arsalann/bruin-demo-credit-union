@@ -1,3 +1,9 @@
 .bruin.yml
 .credentials/
 .archive/
+
+logs/queries
+logs/runs
+logs/*.log
+__pycache__/
+*.py[cod]
