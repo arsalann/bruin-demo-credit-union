@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Activation Salesforce Admin"
+  short_description: "Activate warehouse data into Salesforce safely"
+  default_prompt: "Use $data-activation-salesforce-admin to activate approved CRM data into Salesforce with Bruin-backed validation."
