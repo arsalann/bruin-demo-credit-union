@@ -15,7 +15,7 @@ domains:
   - crm
   - lending
 meta:
-  asset_grain: One row per close month, product family, product name, and Opportunity test tier.
+  asset_grain: One row per close month, product family, product name, credit union tier, and Opportunity test tier.
   load_pattern: View over silver.salesforce_product_pipeline.
   refresh_cadence: Daily batch pipeline.
 
@@ -37,7 +37,10 @@ columns:
     description: Product name.
   - name: opportunity_test_tier
     type: VARCHAR
-    description: Custom Opportunity tier from Salesforce field Credit_Union_Agent_Test_Tier_June15__c.
+    description: Dashboard-compatible Opportunity tier that prefers Credit_Union_Tier__c and falls back to legacy Credit_Union_Agent_Test_Tier_June15__c when blank.
+  - name: credit_union_tier
+    type: VARCHAR
+    description: Credit Union Tier from Salesforce Opportunity field Credit_Union_Tier__c, or Unspecified when the source field is blank.
   - name: line_item_count
     type: INTEGER
     description: Number of opportunity line items.
@@ -71,10 +74,11 @@ SELECT
     product_family,
     product_name,
     opportunity_test_tier,
+    COALESCE(credit_union_tier, 'Unspecified') AS credit_union_tier,
     COUNT(*) AS line_item_count,
     SUM(IFF(NOT is_closed, line_amount_usd, 0)) AS open_line_amount_usd,
     SUM(IFF(NOT is_closed, weighted_line_amount_usd, 0)) AS weighted_open_line_amount_usd,
     SUM(IFF(is_won, line_amount_usd, 0)) AS won_line_amount_usd,
     AVG(unit_price_usd) AS avg_unit_price_usd
 FROM silver.salesforce_product_pipeline
-GROUP BY 1, 2, 3, 4
+GROUP BY 1, 2, 3, 4, 5

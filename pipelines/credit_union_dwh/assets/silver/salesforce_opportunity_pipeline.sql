@@ -66,9 +66,13 @@ columns:
     type: VARCHAR
     description: Salesforce opportunity lead source.
     update_on_merge: true
+  - name: credit_union_tier
+    type: VARCHAR
+    description: Credit union segmentation tier from Salesforce Opportunity field Credit_Union_Tier__c, such as Silver, Gold, or Platinum.
+    update_on_merge: true
   - name: opportunity_test_tier
     type: VARCHAR
-    description: Custom Opportunity tier from Salesforce field Credit_Union_Agent_Test_Tier_June15__c.
+    description: Dashboard-compatible Opportunity tier that prefers Credit_Union_Tier__c and falls back to legacy Credit_Union_Agent_Test_Tier_June15__c when blank.
     update_on_merge: true
   - name: stage_name
     type: VARCHAR
@@ -179,7 +183,12 @@ opportunities AS (
         o.account_id,
         o.name,
         COALESCE(o.lead_source, 'Unknown') AS lead_source,
-        COALESCE(o.credit_union_agent_test_tier_june15__c, 'Unspecified') AS opportunity_test_tier,
+        NULLIF(TRIM(TO_VARCHAR(o.credit_union_tier__c)), '') AS credit_union_tier,
+        COALESCE(
+            NULLIF(TRIM(TO_VARCHAR(o.credit_union_tier__c)), ''),
+            NULLIF(TRIM(TO_VARCHAR(o.credit_union_agent_test_tier_june15__c)), ''),
+            'Unspecified'
+        ) AS opportunity_test_tier,
         COALESCE(o.stage_name, 'Unknown') AS stage_name,
         COALESCE(o.amount::DOUBLE, 0) AS amount,
         COALESCE(o.probability::DOUBLE, 0) AS probability,
@@ -244,6 +253,7 @@ SELECT
         ELSE 'Other'
     END AS product_family,
     o.lead_source,
+    o.credit_union_tier,
     o.opportunity_test_tier,
     o.stage_name,
     CASE

@@ -65,6 +65,9 @@ columns:
   - name: credit_union_agent_test_tier_june15__c
     type: VARCHAR
     description: Custom Opportunity tier field added for the June 15 additive schema-drift demo.
+  - name: credit_union_tier__c
+    type: VARCHAR
+    description: Custom Opportunity text tier used for credit union segmentation demos, populated with values such as Silver, Gold, and Platinum.
   - name: stage_name
     type: VARCHAR
     description: Salesforce opportunity stage.
