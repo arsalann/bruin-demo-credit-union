@@ -71,5 +71,5 @@ FROM account_health
 
 UNION ALL
 
-SELECT 'activity_coverage_pct', COUNT_IF(activity_count > 0) / NULLIF(COUNT(*), 0), 'Average approved loan APR'
+SELECT 'activity_coverage_pct', COUNT_IF(activity_count > 0) / NULLIF(COUNT(*), 0), 'Opportunities with activity'
 FROM pipeline
