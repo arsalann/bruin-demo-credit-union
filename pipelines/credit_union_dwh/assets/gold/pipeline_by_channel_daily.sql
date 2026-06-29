@@ -3,8 +3,8 @@
 name: gold.pipeline_by_channel_daily
 type: sf.sql
 description: |
-  Daily open and won pipeline by close date, lead source, and Opportunity test
-  tier. This asset is the pipeline's time-interval materialization example:
+  Daily open and won pipeline by close date, lead source, credit union tier,
+  and Opportunity test tier. This asset is the pipeline's time-interval materialization example:
   normal runs refresh only close dates in the Bruin interval, while full-refresh
   runs rebuild all close dates.
 connection: snowflake-default
@@ -20,7 +20,7 @@ domains:
   - crm
   - lending
 meta:
-  asset_grain: One row per close date, lead source, and Opportunity test tier.
+  asset_grain: One row per close date, lead source, credit union tier, and Opportunity test tier.
   load_pattern: Time-interval table refresh on close_date.
   refresh_cadence: Daily batch pipeline.
 
@@ -50,7 +50,14 @@ columns:
       - name: not_null
   - name: opportunity_test_tier
     type: VARCHAR
-    description: Custom Opportunity tier from Salesforce field Credit_Union_Agent_Test_Tier_June15__c.
+    description: Dashboard-compatible Opportunity tier that prefers Credit_Union_Tier__c and falls back to legacy Credit_Union_Agent_Test_Tier_June15__c when blank.
+    primary_key: true
+    nullable: false
+    checks:
+      - name: not_null
+  - name: credit_union_tier
+    type: VARCHAR
+    description: Credit Union Tier from Salesforce Opportunity field Credit_Union_Tier__c, or Unspecified when the source field is blank.
     primary_key: true
     nullable: false
     checks:
@@ -82,6 +89,7 @@ SELECT
     close_date,
     lead_source,
     opportunity_test_tier,
+    COALESCE(credit_union_tier, 'Unspecified') AS credit_union_tier,
     SUM(IFF(NOT is_closed, amount_usd, 0)) AS open_amount_usd,
     SUM(IFF(is_won, amount_usd, 0)) AS won_amount_usd,
     COUNT(*) AS opportunity_count,
@@ -92,4 +100,4 @@ WHERE close_date IS NOT NULL
   AND close_date >= TO_DATE('{{ start_date }}')
   AND close_date < TO_DATE('{{ end_date }}')
 {% endif %}
-GROUP BY 1, 2, 3
+GROUP BY 1, 2, 3, 4
