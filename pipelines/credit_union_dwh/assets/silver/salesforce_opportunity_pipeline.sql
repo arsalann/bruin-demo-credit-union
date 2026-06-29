@@ -103,10 +103,12 @@ columns:
     update_on_merge: true
     checks:
       - name: non_negative
+  # SELF_HEALING_SCENARIO_SCORE_FORMAT_COLUMN_START
   - name: agent_test_score
-    type: VARCHAR
-    description: Self-healing scenario score from Salesforce, preserved as source text.
+    type: INTEGER
+    description: Self-healing scenario score. Intentionally typed as INTEGER for the score-format drift test.
     update_on_merge: true
+  # SELF_HEALING_SCENARIO_SCORE_FORMAT_COLUMN_END
   - name: close_date
     type: DATE
     description: Expected or actual close date.
@@ -192,7 +194,9 @@ opportunities AS (
         COALESCE(o.stage_name, 'Unknown') AS stage_name,
         COALESCE(o.amount::DOUBLE, 0) AS amount,
         COALESCE(o.probability::DOUBLE, 0) AS probability,
-        TO_VARCHAR(o.credit_union_agent_test_score__c) AS agent_test_score,
+        -- SELF_HEALING_SCENARIO_SCORE_FORMAT_CAST_START
+        o.credit_union_agent_test_score__c::INTEGER AS agent_test_score,
+        -- SELF_HEALING_SCENARIO_SCORE_FORMAT_CAST_END
         o.close_date::DATE AS close_date,
         COALESCE(o.is_closed::BOOLEAN, FALSE) AS is_closed,
         COALESCE(o.is_won::BOOLEAN, FALSE) AS is_won,

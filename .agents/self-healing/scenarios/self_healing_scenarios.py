@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
-ROOT = Path(__file__).resolve().parents[4]
-PIPELINE_DIR = ROOT / "credit-union" / "pipelines" / "credit_union_dwh"
+ROOT = Path(__file__).resolve().parents[3]
+PIPELINE_DIR = ROOT / "pipelines" / "credit_union_dwh"
 CONTEXT_DIR = ROOT / ".context" / "self-healing-scenarios"
 BRONZE_OPPORTUNITIES = PIPELINE_DIR / "assets" / "bronze" / "salesforce_opportunities.asset.yml"
 SILVER_OPPORTUNITY_PIPELINE = PIPELINE_DIR / "assets" / "silver" / "salesforce_opportunity_pipeline.sql"
@@ -31,22 +31,22 @@ SCORE_BRONZE_BLOCK = """  # SELF_HEALING_SCENARIO_SCORE_FORMAT_START
   # SELF_HEALING_SCENARIO_SCORE_FORMAT_END
 """
 
-SCORE_SILVER_COLUMN_BLOCK = """  # SELF_HEALING_SCENARIO_SCORE_FORMAT_START
+SCORE_SILVER_COLUMN_BLOCK = """  # SELF_HEALING_SCENARIO_SCORE_FORMAT_COLUMN_START
   - name: agent_test_score
     type: INTEGER
     description: Self-healing scenario score. Intentionally typed as INTEGER for the score-format drift test.
     update_on_merge: true
-  # SELF_HEALING_SCENARIO_SCORE_FORMAT_END
+  # SELF_HEALING_SCENARIO_SCORE_FORMAT_COLUMN_END
 """
 
-SCORE_OPPORTUNITIES_SELECT_BLOCK = """        -- SELF_HEALING_SCENARIO_SCORE_FORMAT_START
+SCORE_OPPORTUNITIES_SELECT_BLOCK = """        -- SELF_HEALING_SCENARIO_SCORE_FORMAT_CAST_START
         o.credit_union_agent_test_score__c::INTEGER AS agent_test_score,
-        -- SELF_HEALING_SCENARIO_SCORE_FORMAT_END
+        -- SELF_HEALING_SCENARIO_SCORE_FORMAT_CAST_END
 """
 
-SCORE_FINAL_SELECT_BLOCK = """    -- SELF_HEALING_SCENARIO_SCORE_FORMAT_START
+SCORE_FINAL_SELECT_BLOCK = """    -- SELF_HEALING_SCENARIO_SCORE_FORMAT_OUTPUT_START
     o.agent_test_score,
-    -- SELF_HEALING_SCENARIO_SCORE_FORMAT_END
+    -- SELF_HEALING_SCENARIO_SCORE_FORMAT_OUTPUT_END
 """
 
 GOOD_METRIC_LABEL = "'Opportunities with activity'"
@@ -103,21 +103,44 @@ def apply_score_format_repo_issue(apply: bool) -> None:
     silver = _read(SILVER_OPPORTUNITY_PIPELINE)
 
     changed = False
-    if "SELF_HEALING_SCENARIO_SCORE_FORMAT_START" not in bronze:
+    if (
+        "SELF_HEALING_SCENARIO_SCORE_FORMAT_START" not in bronze
+        and "  - name: credit_union_agent_test_score__c\n" not in bronze
+    ):
         _ensure_contains(bronze, "  - name: close_date\n", BRONZE_OPPORTUNITIES)
         bronze = bronze.replace("  - name: close_date\n", SCORE_BRONZE_BLOCK + "  - name: close_date\n", 1)
         changed = True
 
-    if "SELF_HEALING_SCENARIO_SCORE_FORMAT_START" not in silver:
-        _ensure_contains(silver, "  - name: close_date\n", SILVER_OPPORTUNITY_PIPELINE)
-        _ensure_contains(silver, "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n", SILVER_OPPORTUNITY_PIPELINE)
-        _ensure_contains(silver, "    o.probability AS probability_pct,\n", SILVER_OPPORTUNITY_PIPELINE)
-        silver = silver.replace("  - name: close_date\n", SCORE_SILVER_COLUMN_BLOCK + "  - name: close_date\n", 1)
-        silver = silver.replace(
-            "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n",
-            "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n" + SCORE_OPPORTUNITIES_SELECT_BLOCK,
-            1,
+    if "SELF_HEALING_SCENARIO_SCORE_FORMAT_COLUMN_START" not in silver:
+        silver, column_replacements = re.subn(
+            r"(?ms)^  - name: agent_test_score\n.*?(?=^  - name: close_date\n)",
+            SCORE_SILVER_COLUMN_BLOCK,
+            silver,
+            count=1,
         )
+        if column_replacements == 0:
+            _ensure_contains(silver, "  - name: close_date\n", SILVER_OPPORTUNITY_PIPELINE)
+            silver = silver.replace("  - name: close_date\n", SCORE_SILVER_COLUMN_BLOCK + "  - name: close_date\n", 1)
+        changed = True
+
+    if "SELF_HEALING_SCENARIO_SCORE_FORMAT_CAST_START" not in silver:
+        silver, cast_replacements = re.subn(
+            r"(?m)^        .*credit_union_agent_test_score__c.* AS agent_test_score,\n",
+            SCORE_OPPORTUNITIES_SELECT_BLOCK,
+            silver,
+            count=1,
+        )
+        if cast_replacements == 0:
+            _ensure_contains(silver, "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n", SILVER_OPPORTUNITY_PIPELINE)
+            silver = silver.replace(
+                "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n",
+                "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n" + SCORE_OPPORTUNITIES_SELECT_BLOCK,
+                1,
+            )
+        changed = True
+
+    if "o.agent_test_score," not in silver:
+        _ensure_contains(silver, "    o.probability AS probability_pct,\n", SILVER_OPPORTUNITY_PIPELINE)
         silver = silver.replace(
             "    o.probability AS probability_pct,\n",
             "    o.probability AS probability_pct,\n" + SCORE_FINAL_SELECT_BLOCK,
@@ -136,8 +159,35 @@ def apply_score_format_repo_issue(apply: bool) -> None:
 
 def revert_score_format_repo_issue(apply: bool) -> None:
     bronze = _remove_marker_block(_read(BRONZE_OPPORTUNITIES), "SELF_HEALING_SCENARIO_SCORE_FORMAT", "#")
-    silver = _remove_marker_block(_read(SILVER_OPPORTUNITY_PIPELINE), "SELF_HEALING_SCENARIO_SCORE_FORMAT", "#")
+    silver = _read(SILVER_OPPORTUNITY_PIPELINE)
+    silver = _remove_marker_block(silver, "SELF_HEALING_SCENARIO_SCORE_FORMAT", "#")
+    silver = _remove_marker_block(silver, "SELF_HEALING_SCENARIO_SCORE_FORMAT_COLUMN", "#")
     silver = _remove_marker_block(silver, "SELF_HEALING_SCENARIO_SCORE_FORMAT", "--")
+    silver = _remove_marker_block(silver, "SELF_HEALING_SCENARIO_SCORE_FORMAT_CAST", "--")
+    silver = _remove_marker_block(silver, "SELF_HEALING_SCENARIO_SCORE_FORMAT_OUTPUT", "--")
+    silver, _ = re.subn(
+        r"(?ms)^  - name: close_date\n",
+        "  - name: agent_test_score\n"
+        "    type: VARCHAR\n"
+        "    description: Self-healing scenario score from Salesforce, preserved as source text.\n"
+        "    update_on_merge: true\n"
+        "  - name: close_date\n",
+        silver,
+        count=1,
+    )
+    silver = silver.replace(
+        "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n",
+        "        COALESCE(o.probability::DOUBLE, 0) AS probability,\n"
+        "        TO_VARCHAR(o.credit_union_agent_test_score__c) AS agent_test_score,\n",
+        1,
+    )
+    if "    o.agent_test_score,\n" not in silver:
+        silver = silver.replace(
+            "    o.probability AS probability_pct,\n",
+            "    o.probability AS probability_pct,\n"
+            "    o.agent_test_score,\n",
+            1,
+        )
 
     if apply:
         _write(BRONZE_OPPORTUNITIES, bronze)
