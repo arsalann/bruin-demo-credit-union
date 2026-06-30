@@ -1,0 +1,12 @@
+name: credit_union_dwh
+schedule: daily
+start_date: "2015-01-01"
+
+default_connections:
+  snowflake: "snowflake-default"
+
+notifications:
+  slack:
+    - channel: "#credit-union-demo"
+      success: false
+      failure: true
